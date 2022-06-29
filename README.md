@@ -22,6 +22,8 @@ a custom vm for a custom assembly-like language
 - `exec` interrupts
 - `(register/mem)*` fetches the value from the address
 
+# Expectations
+
 # Rust example
 ```rs
 use ooqu::ooqu;
