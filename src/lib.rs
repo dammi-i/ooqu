@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+#![feature(ptr_const_cast)]
 
 mod instructions {
     pub const NOP: u16 = 0;
@@ -50,20 +50,20 @@ pub enum Instruction {
     MUL,
     DIV,
     EXEC,
-    Imm(u8),
+    Imm(i64),
     Reg(Register),
 }
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Register {
-    RA = 9,
-    RB = 10,
-    RC = 11,
-    RD = 12,
-    RE = 13,
-    RF = 14,
-    RJ = 15,
-    RK = 16,
+    RA = 0,
+    RB,
+    RC,
+    RD,
+    RE,
+    RF,
+    RJ,
+    RK,
 }
 
 pub struct Memory<const U: usize> {
@@ -91,18 +91,44 @@ impl<const U: usize> Memory<U> {
     }
 }
 
+pub struct RegisterStruct {
+    RA: i64,
+    RB: i64,
+    RC: i64,
+    RD: i64,
+    RE: i64,
+    RF: i64,
+    RJ: i64,
+    RK: i64
+}
+
+impl RegisterStruct {
+    pub fn new() -> Self {
+        Self {
+            RA: 0,
+            RB: 0,
+            RC: 0,
+            RD: 0,
+            RE: 0,
+            RF: 0,
+            RJ: 0,
+            RK: 0
+        }
+    }
+}
+
 pub struct Cpu {
-    memory: Memory<512>,
-    registers: HashMap<Register, u8>,
+    memory: Memory<1024>,
+    registers: RegisterStruct,
     run: bool,
     ip: usize,
 }
 
 impl Cpu {
-    pub fn new(mem: Memory<512>) -> Self {
+    pub fn new(mem: Memory<1024>) -> Self {
         Self {
             memory: mem,
-            registers: HashMap::new(),
+            registers: RegisterStruct::new(),
             run: true,
             ip: 0,
         }
@@ -125,16 +151,16 @@ impl Cpu {
                     _ => return Err("add: ok_ored register in the dest operand"),
                 };
                 let src0 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("add: invalid operand"),
                 };
                 let src1 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("add: invalid operand"),
                 };
-                self.registers.insert(dest, src0 + src1);
+                self.register_insert_imm(dest, src0 + src1);
             }
             SUB => {
                 let dest = match self.fetch_next().ok_or("unok_ored end of input")? {
@@ -142,16 +168,16 @@ impl Cpu {
                     _ => return Err("sub: ok_ored register in the dest operand"),
                 };
                 let src0 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("sub: invalid operand"),
                 };
                 let src1 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("sub: invalid operand"),
                 };
-                self.registers.insert(dest, src0 - src1);
+                self.register_insert_imm(dest, src0 - src1);
             }
             MUL => {
                 let dest = match self.fetch_next().ok_or("unok_ored end of input")? {
@@ -159,16 +185,16 @@ impl Cpu {
                     _ => return Err("mul: ok_ored register in the dest operand"),
                 };
                 let src0 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("mul: invalid operand"),
                 };
                 let src1 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("mul: invalid operand"),
                 };
-                self.registers.insert(dest, src0 * src1);
+                self.register_insert_imm(dest, src0 * src1);
             }
             DIV => {
                 let dest = match self.fetch_next().ok_or("unok_ored end of input")? {
@@ -176,34 +202,50 @@ impl Cpu {
                     _ => return Err("div: ok_ored register in the dest operand"),
                 };
                 let src0 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("div: invalid operand"),
                 };
                 let src1 = match self.fetch_next().ok_or("unok_ored end of input")? {
-                    Reg(reg) => self.get_register(reg)?,
+                    Reg(reg) => self.get_register_value(reg),
                     Imm(v) => v,
                     _ => return Err("div: invalid operand"),
                 };
-                self.registers.insert(dest, src0 / src1);
+                self.register_insert_imm(dest, src0 / src1);
+            }
+            LOD => {
+                let dest = match self.fetch_next().ok_or("ok")? {
+                    Reg(reg) => reg,
+                    _ => return Err("lod: dest must be a register")
+                };
             }
             _ => unreachable!(),
         };
         Ok(())
     }
 
-    pub fn get_register(&self, reg: Register) -> Result<u8, &'static str> {
-        let val = match self.registers.get(&reg) {
-            Some(v) => v,
-            None => return Err("reading an uninitialized register"),
-        };
-        Ok(*val)
+    pub fn get_register_value(&self, reg: Register) -> i64 {
+        let ptr = std::ptr::addr_of!(self.registers.RA);
+        unsafe { ptr.offset(reg as _).read() }
+    }
+
+    pub fn get_register_addr(&mut self, reg: Register) -> *mut i64 {
+        unsafe {
+            let ptr = std::ptr::addr_of!(self.registers.RA).as_mut();
+            ptr.offset(reg as _) 
+        }
+
+    }
+
+    pub fn register_insert_imm(&mut self, reg: Register, imm: i64) {
+        unsafe { self.get_register_addr(reg).write(imm) };
     }
 
     pub fn fetch_n_exec(&mut self) -> Result<(), &'static str> {
         let n = self.fetch_next().ok_or("unok_ored end of input")?;
         self.exec(n)
     }
+
 
     pub fn start(&mut self) -> Result<(), &'static str> {
         while self.run {
@@ -219,7 +261,7 @@ mod tests {
 
     #[test]
     fn add() -> Result<(), &'static str> {
-        let mut mem = Memory::<512>::new();
+        let mut mem = Memory::<1024>::new();
         mem.set(0x00, Instruction::ADD)?;
         mem.set(0x01, Instruction::Reg(Register::RA))?;
         mem.set(0x02, Instruction::Imm(1))?;
@@ -230,7 +272,7 @@ mod tests {
         mem.set(0x07, Instruction::Imm(2))?;
         let mut cpu = Cpu::new(mem);
         cpu.start()?;
-        assert_eq!(cpu.get_register(Register::RA), Ok(6));
+        assert_eq!(cpu.get_register_value(Register::RA), 6);
         Ok(())
     }
 }
