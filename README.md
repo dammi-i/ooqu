@@ -25,6 +25,7 @@ a custom vm for a custom assembly-like language
 # Expectations
 
 # Rust example
+have no idea how to implement this lol
 ```rs
 use ooqu::ooqu;
 fn main() {
@@ -34,18 +35,18 @@ fn main() {
     ooqu!(
         "add {out}, {a}, {b}"
     );
-    println!("{} + {} = {}", a, b, o);
+    println!("{} + {} = {}", a, b, out);
 }
 ```
 
 # Exec table
 `ra` should hold the value of the target interrupt code to call and the rest of the registers are passed as arguments to that call.
 
-ID   |   Name   | ra   | rb  |
------|----------|------|-----|
-0    | exit     | 0    | code|
-1    | write    | 1    | fd  |
-2    | input    | 2    | n/a |
+ID   |   Name   | ra   | rb  | rc  |
+-----|----------|------|-----|-----|
+0    | exit     | 0    | code|     |
+1    | write    | 1    | fd  |length|
+2    | read     | 2    | fd  |length|
 
 # Example
 ```
@@ -57,6 +58,6 @@ end
 sto ra, 1 // ID for write interrupt 
 sto rb, 1 // stdout
 lod rc, str // address of the string
-lod rd, len // len of bytes to write
+sto rd, len // len of bytes to write
 exec // execute the interrupt
 ```
